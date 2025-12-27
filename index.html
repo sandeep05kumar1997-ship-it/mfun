@@ -1,0 +1,602 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Pause, RotateCcw, Volume2, VolumeX } from 'lucide-react';
+
+const SnakeSurvivalGame = () => {
+  const canvasRef = useRef(null);
+  const [gameState, setGameState] = useState('menu'); // menu, playing, paused, gameOver
+  const [score, setScore] = useState(0);
+  const [health, setHealth] = useState(100);
+  const [snakeHealth, setSnakeHealth] = useState(100);
+  const [soundOn, setSoundOn] = useState(true);
+  const [dialogue, setDialogue] = useState('');
+  const [showDialogue, setShowDialogue] = useState(false);
+  
+  const gameRef = useRef({
+    player: { x: 200, y: 300, vx: 0, vy: 0, speed: 3, hiding: false },
+    girl: { x: 250, y: 300 },
+    snake: { x: 600, y: 300, vx: -1, vy: 0, speed: 1.5, targetX: 0, targetY: 0 },
+    obstacles: [],
+    trees: [],
+    fruits: [],
+    houses: [],
+    rocks: [],
+    keys: {},
+    hasStick: false,
+    frame: 0
+  });
+
+  const dialogues = {
+    playerFear: [
+      "बचाओ! यह साँप बहुत बड़ा है!",
+      "मुझे यहाँ से भागना होगा!",
+      "कहीं छुपने की जगह चाहिए!"
+    ],
+    snakeAngry: [
+      "सस्स्स्स... तुम मुझसे नहीं बच सकते!",
+      "मैं भूखा हूँ!",
+      "सस्स्स... आ जाओ मेरे पास!"
+    ],
+    girlWorried: [
+      "सावधान रहो!",
+      "उस घर में छुप जाओ!",
+      "डंडा उठा लो!"
+    ],
+    victory: [
+      "शाबाश! तुमने साँप को भगा दिया!",
+      "हम सुरक्षित हैं!"
+    ]
+  };
+
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const game = gameRef.current;
+
+    // Initialize game objects
+    if (game.trees.length === 0) {
+      // Trees with fruits
+      for (let i = 0; i < 15; i++) {
+        game.trees.push({
+          x: Math.random() * 800,
+          y: Math.random() * 500 + 50,
+          hasFruit: Math.random() > 0.5
+        });
+      }
+
+      // Rocks
+      for (let i = 0; i < 10; i++) {
+        game.rocks.push({
+          x: Math.random() * 700 + 50,
+          y: Math.random() * 400 + 100,
+          size: 20 + Math.random() * 30
+        });
+      }
+
+      // Houses
+      game.houses = [
+        { x: 100, y: 100, width: 80, height: 80 },
+        { x: 650, y: 400, width: 80, height: 80 }
+      ];
+    }
+
+    const animate = () => {
+      if (gameState !== 'playing') return;
+
+      game.frame++;
+      ctx.clearRect(0, 0, 800, 600);
+
+      // Background - Sky
+      const gradient = ctx.createLinearGradient(0, 0, 0, 600);
+      gradient.addColorStop(0, '#87CEEB');
+      gradient.addColorStop(1, '#E0F6FF');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 800, 600);
+
+      // Ground
+      ctx.fillStyle = '#90EE90';
+      ctx.fillRect(0, 400, 800, 200);
+
+      // Pond
+      ctx.fillStyle = '#4682B4';
+      ctx.beginPath();
+      ctx.ellipse(150, 500, 80, 40, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Waterfall
+      ctx.fillStyle = '#ADD8E6';
+      ctx.fillRect(720, 100, 30, 300);
+      ctx.fillStyle = '#B0E0E6';
+      for (let i = 0; i < 5; i++) {
+        ctx.fillRect(720 + i * 6, 100 + (game.frame % 50), 5, 20);
+      }
+
+      // Trees and fruits
+      game.trees.forEach(tree => {
+        // Tree trunk
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(tree.x - 8, tree.y, 16, 40);
+        
+        // Tree leaves
+        ctx.fillStyle = '#228B22';
+        ctx.beginPath();
+        ctx.arc(tree.x, tree.y - 10, 25, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Fruits
+        if (tree.hasFruit) {
+          ctx.fillStyle = '#FF6347';
+          ctx.beginPath();
+          ctx.arc(tree.x - 10, tree.y - 15, 5, 0, Math.PI * 2);
+          ctx.arc(tree.x + 10, tree.y - 20, 5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      // Rocks
+      game.rocks.forEach(rock => {
+        ctx.fillStyle = '#808080';
+        ctx.beginPath();
+        ctx.arc(rock.x, rock.y, rock.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#696969';
+        ctx.beginPath();
+        ctx.arc(rock.x - rock.size/4, rock.y - rock.size/4, rock.size/2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Houses
+      game.houses.forEach(house => {
+        // House body
+        ctx.fillStyle = '#D2691E';
+        ctx.fillRect(house.x, house.y, house.width, house.height);
+        
+        // Roof
+        ctx.fillStyle = '#8B4513';
+        ctx.beginPath();
+        ctx.moveTo(house.x - 10, house.y);
+        ctx.lineTo(house.x + house.width/2, house.y - 30);
+        ctx.lineTo(house.x + house.width + 10, house.y);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Door
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(house.x + 25, house.y + 40, 30, 40);
+        
+        // Window
+        ctx.fillStyle = '#87CEEB';
+        ctx.fillRect(house.x + 10, house.y + 20, 20, 20);
+      });
+
+      // Girl
+      const girl = game.girl;
+      ctx.fillStyle = '#FFE4C4'; // Skin
+      ctx.beginPath();
+      ctx.arc(girl.x, girl.y - 30, 12, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Hair
+      ctx.fillStyle = '#2C1810';
+      ctx.beginPath();
+      ctx.arc(girl.x, girl.y - 35, 15, 0, Math.PI);
+      ctx.fill();
+      
+      // Dress
+      ctx.fillStyle = '#FF69B4';
+      ctx.beginPath();
+      ctx.moveTo(girl.x - 15, girl.y - 15);
+      ctx.lineTo(girl.x - 20, girl.y + 10);
+      ctx.lineTo(girl.x + 20, girl.y + 10);
+      ctx.lineTo(girl.x + 15, girl.y - 15);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Arms
+      ctx.strokeStyle = '#FFE4C4';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(girl.x - 15, girl.y - 10);
+      ctx.lineTo(girl.x - 25, girl.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(girl.x + 15, girl.y - 10);
+      ctx.lineTo(girl.x + 25, girl.y);
+      ctx.stroke();
+
+      // Player
+      const player = game.player;
+      if (!player.hiding) {
+        ctx.fillStyle = '#FFD700'; // Skin
+        ctx.beginPath();
+        ctx.arc(player.x, player.y - 30, 12, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Body
+        ctx.fillStyle = '#4169E1';
+        ctx.fillRect(player.x - 12, player.y - 18, 24, 30);
+        
+        // Arms
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(player.x - 12, player.y - 10);
+        ctx.lineTo(player.x - 22, player.y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(player.x + 12, player.y - 10);
+        ctx.lineTo(player.x + 22, player.y);
+        ctx.stroke();
+        
+        // Legs
+        ctx.beginPath();
+        ctx.moveTo(player.x - 6, player.y + 12);
+        ctx.lineTo(player.x - 8, player.y + 25);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(player.x + 6, player.y + 12);
+        ctx.lineTo(player.x + 8, player.y + 25);
+        ctx.stroke();
+        
+        // Stick if collected
+        if (game.hasStick) {
+          ctx.strokeStyle = '#8B4513';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(player.x + 15, player.y - 20);
+          ctx.lineTo(player.x + 15, player.y + 15);
+          ctx.stroke();
+        }
+      }
+
+      // Snake
+      const snake = game.snake;
+      const segments = 8;
+      for (let i = 0; i < segments; i++) {
+        const size = 15 - i * 1.5;
+        const offsetX = Math.sin(game.frame * 0.1 + i * 0.5) * 8;
+        const offsetY = Math.cos(game.frame * 0.1 + i * 0.5) * 3;
+        
+        ctx.fillStyle = i === 0 ? '#006400' : '#228B22';
+        ctx.beginPath();
+        ctx.arc(
+          snake.x - i * 12 + offsetX,
+          snake.y + offsetY,
+          size,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+        
+        // Snake head details
+        if (i === 0) {
+          // Eyes
+          ctx.fillStyle = '#FF0000';
+          ctx.beginPath();
+          ctx.arc(snake.x + 5, snake.y - 5, 3, 0, Math.PI * 2);
+          ctx.arc(snake.x + 5, snake.y + 5, 3, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Tongue
+          ctx.strokeStyle = '#FF0000';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(snake.x + 15, snake.y);
+          ctx.lineTo(snake.x + 25, snake.y - 5);
+          ctx.moveTo(snake.x + 25, snake.y - 5);
+          ctx.lineTo(snake.x + 30, snake.y - 8);
+          ctx.moveTo(snake.x + 25, snake.y - 5);
+          ctx.lineTo(snake.x + 30, snake.y - 2);
+          ctx.stroke();
+        }
+      }
+
+      // Movement
+      player.x += player.vx;
+      player.y += player.vy;
+      
+      // Boundaries
+      player.x = Math.max(20, Math.min(780, player.x));
+      player.y = Math.max(40, Math.min(580, player.y));
+
+      // Snake AI - chase player
+      if (!player.hiding) {
+        const dx = player.x - snake.x;
+        const dy = player.y - snake.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist > 0) {
+          snake.vx = (dx / dist) * snake.speed;
+          snake.vy = (dy / dist) * snake.speed;
+        }
+      } else {
+        // Random movement when player is hiding
+        if (game.frame % 60 === 0) {
+          snake.vx = (Math.random() - 0.5) * 2;
+          snake.vy = (Math.random() - 0.5) * 2;
+        }
+      }
+      
+      snake.x += snake.vx;
+      snake.y += snake.vy;
+      snake.x = Math.max(30, Math.min(770, snake.x));
+      snake.y = Math.max(30, Math.min(570, snake.y));
+
+      // Collision with snake
+      const distToSnake = Math.sqrt(
+        (player.x - snake.x) ** 2 + (player.y - snake.y) ** 2
+      );
+      
+      if (distToSnake < 30 && !player.hiding) {
+        setHealth(h => Math.max(0, h - 0.5));
+        if (game.frame % 120 === 0) {
+          showRandomDialogue('snakeAngry');
+        }
+      }
+
+      // Attack snake with stick
+      if (game.hasStick && game.keys[' '] && distToSnake < 40) {
+        setSnakeHealth(h => Math.max(0, h - 1));
+        setScore(s => s + 5);
+        if (game.frame % 60 === 0) {
+          showRandomDialogue('playerFear');
+        }
+      }
+
+      // Check hiding in houses
+      player.hiding = game.houses.some(house => 
+        player.x > house.x && 
+        player.x < house.x + house.width &&
+        player.y > house.y &&
+        player.y < house.y + house.height
+      );
+
+      // Collision with rocks
+      game.rocks.forEach(rock => {
+        const distToRock = Math.sqrt(
+          (snake.x - rock.x) ** 2 + (snake.y - rock.y) ** 2
+        );
+        if (distToRock < rock.size + 15) {
+          setSnakeHealth(h => Math.max(0, h - 0.3));
+          snake.vx *= -1;
+          snake.vy *= -1;
+        }
+      });
+
+      // Random dialogues
+      if (game.frame % 300 === 0 && Math.random() > 0.5) {
+        const types = ['playerFear', 'snakeAngry', 'girlWorried'];
+        showRandomDialogue(types[Math.floor(Math.random() * types.length)]);
+      }
+
+      // UI
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(10, 10, 200, 80);
+      ctx.fillStyle = '#FFF';
+      ctx.font = 'bold 16px Arial';
+      ctx.fillText(`Score: ${score}`, 20, 35);
+      ctx.fillText(`Health: ${Math.floor(health)}`, 20, 60);
+      ctx.fillText(`Snake: ${Math.floor(snakeHealth)}`, 20, 85);
+
+      // Instructions
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(220, 10, 360, 50);
+      ctx.fillStyle = '#FFF';
+      ctx.font = '14px Arial';
+      ctx.fillText('Arrow Keys: Move | Enter: Hide | Space: Attack', 230, 35);
+      ctx.fillText('घर में छुपो | डंडे से हमला करो', 230, 55);
+
+      if (health <= 0) {
+        setGameState('gameOver');
+      }
+      
+      if (snakeHealth <= 0) {
+        showRandomDialogue('victory');
+        setTimeout(() => setGameState('gameOver'), 3000);
+      }
+
+      requestAnimationFrame(animate);
+    };
+
+    animate();
+  }, [gameState, score, health, snakeHealth]);
+
+  const showRandomDialogue = (type) => {
+    const dialogueList = dialogues[type];
+    const randomDialogue = dialogueList[Math.floor(Math.random() * dialogueList.length)];
+    setDialogue(randomDialogue);
+    setShowDialogue(true);
+    
+    if (soundOn) {
+      // Play sound effect
+      const audio = new Audio();
+      audio.volume = 0.3;
+      audio.play().catch(() => {});
+    }
+    
+    setTimeout(() => setShowDialogue(false), 3000);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (gameState !== 'playing') return;
+      const game = gameRef.current;
+      game.keys[e.key] = true;
+
+      const speed = game.player.speed;
+      switch(e.key) {
+        case 'ArrowUp':
+          game.player.vy = -speed;
+          break;
+        case 'ArrowDown':
+          game.player.vy = speed;
+          break;
+        case 'ArrowLeft':
+          game.player.vx = -speed;
+          break;
+        case 'ArrowRight':
+          game.player.vx = speed;
+          break;
+        case 'Enter':
+          game.player.hiding = true;
+          break;
+        case 's':
+        case 'S':
+          game.hasStick = true;
+          showRandomDialogue('girlWorried');
+          break;
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      const game = gameRef.current;
+      game.keys[e.key] = false;
+      
+      switch(e.key) {
+        case 'ArrowUp':
+        case 'ArrowDown':
+          game.player.vy = 0;
+          break;
+        case 'ArrowLeft':
+        case 'ArrowRight':
+          game.player.vx = 0;
+          break;
+        case 'Enter':
+          game.player.hiding = false;
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [gameState, soundOn]);
+
+  const startGame = () => {
+    setGameState('playing');
+    setScore(0);
+    setHealth(100);
+    setSnakeHealth(100);
+    const game = gameRef.current;
+    game.player = { x: 200, y: 300, vx: 0, vy: 0, speed: 3, hiding: false };
+    game.snake = { x: 600, y: 300, vx: -1, vy: 0, speed: 1.5 };
+    game.hasStick = false;
+    game.frame = 0;
+  };
+
+  const resetGame = () => {
+    setGameState('menu');
+    gameRef.current.trees = [];
+    gameRef.current.rocks = [];
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-green-800 to-green-600 p-4">
+      <div className="bg-white rounded-lg shadow-2xl p-6 max-w-4xl">
+        <h1 className="text-4xl font-bold text-center mb-4 text-green-800">
+          🐍 Snake Survival Adventure
+        </h1>
+        
+        {gameState === 'menu' && (
+          <div className="text-center space-y-4">
+            <div className="bg-green-100 p-6 rounded-lg">
+              <h2 className="text-2xl font-bold mb-4">गेम के नियम</h2>
+              <div className="text-left space-y-2">
+                <p>🎮 <strong>Arrow Keys</strong> - चलने के लिए</p>
+                <p>🏠 <strong>Enter</strong> - घर में छुपने के लिए</p>
+                <p>🪵 <strong>S Key</strong> - डंडा उठाने के लिए</p>
+                <p>⚔️ <strong>Space</strong> - साँप पर हमला करने के लिए</p>
+                <p className="mt-4">🎯 साँप से बचो, पत्थरों से सावधान रहो!</p>
+                <p>💚 साँप को हराओ और अंक प्राप्त करो!</p>
+              </div>
+            </div>
+            <button
+              onClick={startGame}
+              className="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-lg text-xl transition"
+            >
+              <Play className="inline mr-2" />
+              खेल शुरू करें
+            </button>
+          </div>
+        )}
+
+        {gameState === 'playing' && (
+          <>
+            <div className="relative">
+              <canvas
+                ref={canvasRef}
+                width={800}
+                height={600}
+                className="border-4 border-green-800 rounded-lg bg-sky-200"
+              />
+              
+              {showDialogue && (
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-80 text-white px-6 py-3 rounded-lg text-lg font-bold animate-pulse">
+                  {dialogue}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-center gap-4 mt-4">
+              <button
+                onClick={() => setGameState('paused')}
+                className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded"
+              >
+                <Pause className="inline mr-2" />
+                Pause
+              </button>
+              <button
+                onClick={() => setSoundOn(!soundOn)}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+              >
+                {soundOn ? <Volume2 className="inline" /> : <VolumeX className="inline" />}
+              </button>
+              <button
+                onClick={resetGame}
+                className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded"
+              >
+                <RotateCcw className="inline mr-2" />
+                Reset
+              </button>
+            </div>
+          </>
+        )}
+
+        {gameState === 'paused' && (
+          <div className="text-center">
+            <h2 className="text-3xl font-bold mb-4">Game Paused</h2>
+            <button
+              onClick={() => setGameState('playing')}
+              className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg"
+            >
+              <Play className="inline mr-2" />
+              फिर से शुरू करें
+            </button>
+          </div>
+        )}
+
+        {gameState === 'gameOver' && (
+          <div className="text-center space-y-4">
+            <h2 className="text-3xl font-bold">
+              {snakeHealth <= 0 ? '🎉 आपने जीत लिया!' : '💔 Game Over'}
+            </h2>
+            <p className="text-2xl">Final Score: {score}</p>
+            <button
+              onClick={resetGame}
+              className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg"
+            >
+              <RotateCcw className="inline mr-2" />
+              फिर से खेलें
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default SnakeSurvivalGame;
